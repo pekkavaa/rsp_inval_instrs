@@ -5,6 +5,27 @@ DEFINE_RSP_UCODE(rsp_inval_instrs);
 #define DUMP_BYTES (3*4)
 static uint64_t dmem_scratch_space[0x100];
 
+#define COP0_DMA_SPADDR         0
+#define COP0_DMA_RAMADDR        1
+#define COP0_DMA_READ           2
+#define COP0_DMA_WRITE          3
+#define COP0_SP_STATUS          4
+#define COP0_DMA_FULL           5
+#define COP0_DMA_BUSY           6
+#define COP0_SEMAPHORE          7
+#define COP0_DP_START           8
+#define COP0_DP_END             9
+#define COP0_DP_CURRENT         10
+#define COP0_DP_STATUS          11
+#define COP0_DP_CLOCK           12
+#define COP0_DP_BUSY            13
+#define COP0_DP_PIPE_BUSY       14
+#define COP0_DP_TMEM_BUSY       15
+
+#define COP2_CTRL_VCO           0
+#define COP2_CTRL_VCC           1
+#define COP2_CTRL_VCE           2
+
 int main(void)
 {
     debug_init_isviewer();
@@ -49,11 +70,13 @@ int main(void)
     // debugf("DMEM:\n");
     // debug_hexdump(after.dmem, 100);
     int diffs=0;
+    int ignored=0;
     int cop0diffs = 0;
     for (int i=0;i<offsetof(rsp_snapshot_t, pc);i++) {
         uint8_t* a = (uint8_t*)&before;
         uint8_t* b = (uint8_t*)&after;
         if (a[i] != b[i]) {
+            bool ignore=false;
             debugf("[0x%04x] before=%02x vs after=%02x. DMEM[word=%d]\n", i,a[i],b[i],i/4);
             if (i < offsetof(rsp_snapshot_t, vpr)) {
                 int idx = i/4;
@@ -66,16 +89,22 @@ int main(void)
                 debugf("vaccum %d\n", idx);
             } else if ( i < offsetof(rsp_snapshot_t, cop2)) {
                 int idx = (i - offsetof(rsp_snapshot_t, cop0))/4;
-                debugf("cop0 %d\n", idx);
-                cop0diffs++;
-
-                
+                if (idx == COP0_SEMAPHORE || idx == COP0_DP_CLOCK || idx == COP0_DP_PIPE_BUSY) {
+                    ignore=true;
+                    ignored++;
+                } else {
+                    debugf("cop0 %d\n", idx);
+                    cop0diffs++;
+                }
                 
             } else if ( i < offsetof(rsp_snapshot_t, pc)) {
                 int idx = (i - offsetof(rsp_snapshot_t, cop2))/4;
                 debugf("cop2 %d\n", idx);
             }
-            diffs++;
+
+            if (!ignore) {
+                diffs++;
+            }
         }
     }
 
@@ -107,9 +136,7 @@ int main(void)
                 }
     }
 
-    if (diffs > 0) {
-        debugf("Found %d diffs\n",diffs);
-    }
+    debugf("Found %d diffs (not including %d ignored)\n",diffs,ignored);
 
     debugf("Before:\n");
     debug_hexdump(&before, 200);
