@@ -30,6 +30,10 @@ dump:
 //#define phase $30
 
 entry_point:
+	// wait until DMA has reached a stable state
+    jal     dma_wait_idle
+	nop
+
 	sw $0,  0*4(zero)
 	sw $1,  1*4(zero)
 	sw $2,  2*4(zero)
@@ -183,41 +187,40 @@ entry_point:
 
     // Store again
     
-    // 256 words = 1024 bytes
-	sw $0,  (256+0)*4(zero)
-	sw $1,  (256+1)*4(zero)
-	sw $2,  (256+2)*4(zero)
-	sw $3,  (256+3)*4(zero)
-	sw $4,  (256+4)*4(zero)
-	sw $5,  (256+5)*4(zero)
-	sw $6,  (256+6)*4(zero)
-	sw $7,  (256+7)*4(zero)
-	sw $8,  (256+8)*4(zero)
-	sw $9,  (256+9)*4(zero)
-	sw $10, (256+10)*4(zero)
-	sw $11, (256+11)*4(zero)
-	sw $12, (256+12)*4(zero)
-	sw $13, (256+13)*4(zero)
-	sw $14, (256+14)*4(zero)
-	sw $15, (256+15)*4(zero)
-	sw $16, (256+16)*4(zero) // s0
-	sw $17, (256+17)*4(zero)
-	sw $18, (256+18)*4(zero)
-	sw $19, (256+19)*4(zero)
-	sw $20, (256+20)*4(zero)
-	sw $21, (256+21)*4(zero)
-	sw $22, (256+22)*4(zero)
-	sw $23, (256+23)*4(zero)
-	sw $24, (256+24)*4(zero)
-	sw $25, (256+25)*4(zero)
-	sw $26, (256+26)*4(zero)
-	sw $27, (256+27)*4(zero)
-	sw $28, (256+28)*4(zero)
-	sw $29, (256+29)*4(zero)
-	sw $30, (256+30)*4(zero)
-	sw $31, (256+31)*4(zero)
+	sw $0,  1024+(0)*4(zero)
+	sw $1,  1024+(1)*4(zero)
+	sw $2,  1024+(2)*4(zero)
+	sw $3,  1024+(3)*4(zero)
+	sw $4,  1024+(4)*4(zero)
+	sw $5,  1024+(5)*4(zero)
+	sw $6,  1024+(6)*4(zero)
+	sw $7,  1024+(7)*4(zero)
+	sw $8,  1024+(8)*4(zero)
+	sw $9,  1024+(9)*4(zero)
+	sw $10, 1024+(10)*4(zero)
+	sw $11, 1024+(11)*4(zero)
+	sw $12, 1024+(12)*4(zero)
+	sw $13, 1024+(13)*4(zero)
+	sw $14, 1024+(14)*4(zero)
+	sw $15, 1024+(15)*4(zero)
+	sw $16, 1024+(16)*4(zero) // s0
+	sw $17, 1024+(17)*4(zero)
+	sw $18, 1024+(18)*4(zero)
+	sw $19, 1024+(19)*4(zero)
+	sw $20, 1024+(20)*4(zero)
+	sw $21, 1024+(21)*4(zero)
+	sw $22, 1024+(22)*4(zero)
+	sw $23, 1024+(23)*4(zero)
+	sw $24, 1024+(24)*4(zero)
+	sw $25, 1024+(25)*4(zero)
+	sw $26, 1024+(26)*4(zero)
+	sw $27, 1024+(27)*4(zero)
+	sw $28, 1024+(28)*4(zero)
+	sw $29, 1024+(29)*4(zero)
+	sw $30, 1024+(30)*4(zero)
+	sw $31, 1024+(31)*4(zero)
 
-	li s0, 256+32*4
+	li s0, 1024+32*4
 	sqv $v00,  0*16,s0
 	sqv $v01,  1*16,s0
 	sqv $v02,  2*16,s0
@@ -307,31 +310,6 @@ entry_point:
 	sw t1, 1*4(s0)
 	sw t2, 2*4(s0)
 
-    // Setup
-    // cfc2 $1, COP2_CTRL_VCO
-    // cfc2 $2, COP2_CTRL_VCC
-    // cfc2 $3, COP2_CTRL_VCE
-    // lw $1, 0x1
-    // lw $2, 0x2
-    // lw $3, 0x3
-    // sw $1, (%lo(dump) + 0x0)($0)
-    // sw $2, (%lo(dump) + 0x4)($0)
-    // sw $3, (%lo(dump) + 0x8)($0)
-
-    // lw      dramAddr, (%lo(dump))($0)
-    // li      dmaSizeR, (0x2 * 8) - 1  // minus 1 for DMA    
-    // li      dmaDmemIn, %lo(dump)
-
-    // mtc0    dramAddr, COP0_DMA_RAMADDR
-    // mtc0    dmaSizeR, COP0_DMA_WRITE
-    // mtc0    dmaDmemIn, COP0_DMA_SPADDR
-    // jal     dma_wait_idle
-    // mtc0   dmaSizeR, COP0_DMA_WRITE
-
-    // TODO store to RDRAM via DMA
-    // TODO run test
-    // TODO store another dump to RDRAM via DMA
-    
     // Test passed
     j       signal_and_halt
      li     $1, (SP_WSTATUS_SET_HALT | SP_WSTATUS_SET_SIG2)  // Success
