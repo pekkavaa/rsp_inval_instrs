@@ -26,6 +26,16 @@ static uint64_t dmem_scratch_space[0x100];
 #define COP2_CTRL_VCC           1
 #define COP2_CTRL_VCE           2
 
+#define SENTINEL_INSTRUCTION (0x24001234)  // li $0, 0x1234
+static int sentinel_offset = -1;
+
+void set_test_instruction(uint32_t instr) {
+    *((uint32_t*)&rsp_inval_instrs.code[sentinel_offset]) = instr;
+    int codebytes = (rsp_inval_instrs.code_end - (void*)rsp_inval_instrs.code);
+    data_cache_hit_writeback_invalidate(rsp_inval_instrs.code, (codebytes+15)&~0xf);
+    rsp_load_code(rsp_inval_instrs.code, codebytes, 0);
+}
+
 int main(void)
 {
     debug_init_isviewer();
@@ -36,6 +46,28 @@ int main(void)
     SP_DMEM[0] = (uint32_t)(&dmem_scratch_space[0]);
 
     debugf("Build: " __TIMESTAMP__ "\n");
+    // debugf("RSP IMEM:\n");
+    int codebytes = (rsp_inval_instrs.code_end - (void*)rsp_inval_instrs.code);
+    // debug_hexdump(rsp_inval_instrs.code, codebytes);
+
+    uint32_t* code=(uint32_t*)rsp_inval_instrs.code;
+    int offset=0;
+    while (code < (uint32_t*)rsp_inval_instrs.code_end) {
+        if (*code == SENTINEL_INSTRUCTION) {
+            // sentinel_offset = rsp_inval_instrs.data - (uint8_t*)code;
+            sentinel_offset = offset;
+        }
+        offset+=4;
+        code++;
+    }
+    assert(sentinel_offset > -1);
+    debugf("Found sentinel at offset 0x%04x\n", sentinel_offset);
+
+    set_test_instruction(0x34018888);   // li $1, 0x8888
+
+    // debugf("RSP IMEM after:\n");
+    // debug_hexdump(rsp_inval_instrs.code, codebytes);
+
     debugf("Testing...\n");
     rsp_run_async();
     uint32_t status = 0;
@@ -56,16 +88,16 @@ int main(void)
     //memset(after.dmem, 0, 4096);
     rsp_read_data(&after.dmem, 4096, 0);
 
-// typedef struct {
-//     uint32_t gpr[32];           ///< General purpose registers
-//     uint16_t vpr[32][8];        ///< Vector registers
-//     uint16_t vaccum[3][8];      ///< Vector accumulator
-//     uint32_t cop0[16];          ///< COP0 registers (note: reg 4 is SP_STATUS)
-//     uint32_t cop2[3];           ///< COP2 control registers
-//     uint32_t pc;                ///< Program counter
-//     uint8_t dmem[4096] __attribute__((aligned(8)));  ///< Contents of DMEM
-//     uint8_t imem[4096] __attribute__((aligned(8)));  ///< Contents of IMEM
-// } rsp_snapshot_t;
+    // typedef struct {
+    //     uint32_t gpr[32];           ///< General purpose registers
+    //     uint16_t vpr[32][8];        ///< Vector registers
+    //     uint16_t vaccum[3][8];      ///< Vector accumulator
+    //     uint32_t cop0[16];          ///< COP0 registers (note: reg 4 is SP_STATUS)
+    //     uint32_t cop2[3];           ///< COP2 control registers
+    //     uint32_t pc;                ///< Program counter
+    //     uint8_t dmem[4096] __attribute__((aligned(8)));  ///< Contents of DMEM
+    //     uint8_t imem[4096] __attribute__((aligned(8)));  ///< Contents of IMEM
+    // } rsp_snapshot_t;
 
     // debugf("DMEM:\n");
     // debug_hexdump(after.dmem, 100);
@@ -77,7 +109,7 @@ int main(void)
         uint8_t* b = (uint8_t*)&after;
         if (a[i] != b[i]) {
             bool ignore=false;
-            debugf("[0x%04x] before=%02x vs after=%02x. DMEM[word=%d]\n", i,a[i],b[i],i/4);
+            // debugf("[0x%04x] before=%02x vs after=%02x. DMEM[word=%d]\n", i,a[i],b[i],i/4);
             if (i < offsetof(rsp_snapshot_t, vpr)) {
                 int idx = i/4;
                 debugf("gpr %d\n", idx);
@@ -109,39 +141,37 @@ int main(void)
     }
 
     if (cop0diffs > 0) { 
-                debugf("  before vs after\n");
-                // print before vs after cop0 registers in their own two columns
-                // before.cop0 and after.cop0
-                const char* cop0names[] = {
-                    "COP0_DMA_SPADDR",
-                    "COP0_DMA_RAMADDR",
-                    "COP0_DMA_READ",
-                    "COP0_DMA_WRITE",
-                    "COP0_SP_STATUS",
-                    "COP0_DMA_FULL",
-                    "COP0_DMA_BUSY",
-                    "COP0_SEMAPHORE",
-                    "COP0_DP_START",
-                    "COP0_DP_END",
-                    "COP0_DP_CURRENT",
-                    "COP0_DP_STATUS",
-                    "COP0_DP_CLOCK",
-                    "COP0_DP_BUSY",
-                    "COP0_DP_PIPE_BUSY",
-                    "COP0_DP_TMEM_BUSY"
-                };
+        debugf("  before vs after\n");
+        const char* cop0names[] = {
+            "COP0_DMA_SPADDR",
+            "COP0_DMA_RAMADDR",
+            "COP0_DMA_READ",
+            "COP0_DMA_WRITE",
+            "COP0_SP_STATUS",
+            "COP0_DMA_FULL",
+            "COP0_DMA_BUSY",
+            "COP0_SEMAPHORE",
+            "COP0_DP_START",
+            "COP0_DP_END",
+            "COP0_DP_CURRENT",
+            "COP0_DP_STATUS",
+            "COP0_DP_CLOCK",
+            "COP0_DP_BUSY",
+            "COP0_DP_PIPE_BUSY",
+            "COP0_DP_TMEM_BUSY"
+        };
 
-                for (int j=0;j<16;j++) {
-                    debugf("[%18s (%02d)] 0x%08lx 0x%08lx%s\n", cop0names[j], j, before.cop0[j], after.cop0[j], (before.cop0[j] != after.cop0[j]) ? " <--" : "");
-                }
+        for (int j=0;j<16;j++) {
+            debugf("[%18s (%02d)] 0x%08lx 0x%08lx%s\n", cop0names[j], j, before.cop0[j], after.cop0[j], (before.cop0[j] != after.cop0[j]) ? " <--" : "");
+        }
     }
 
     debugf("Found %d diffs (not including %d ignored)\n",diffs,ignored);
 
-    debugf("Before:\n");
-    debug_hexdump(&before, 200);
-    debugf("After:\n");
-    debug_hexdump(&after, 200);
+    // debugf("Before:\n");
+    // debug_hexdump(&before, 200);
+    // debugf("After:\n");
+    // debug_hexdump(&after, 200);
 
     if((status & SP_STATUS_SIG2)){
         debugf("Test passed");
@@ -152,7 +182,6 @@ int main(void)
     }
     debugf(" after %d ms\n", ms);
     debugf("Done\n");
-    //free(dmem);
 
     //rsp_crash();
 }

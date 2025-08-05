@@ -184,6 +184,8 @@ entry_point:
 	sw $16, 16*4(zero)
 
     // Do Something
+	li $0, 0x1234 // this sentinel will be replaced on the CPU-side
+	//li $1, 0x8888
 
     // Store again
     
