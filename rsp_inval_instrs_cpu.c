@@ -25,17 +25,36 @@ int main(void)
         if (status & (SP_STATUS_HALTED | SP_STATUS_BROKE | SP_STATUS_SIG2 | SP_STATUS_SIG3)) break;
     }
 
+    rsp_snapshot_t before={};
     rsp_snapshot_t after={};
     // align to 8 bytes
 
-    rsp_read_data(&after, 764, 0);
+    rsp_read_data(&before, 764, 0);
+    rsp_read_data(&after, 764, 1024);
 
-    memset(after.dmem, 0, 4096);
+    //memset(after.dmem, 0, 4096);
     rsp_read_data(&after.dmem, 4096, 0);
 
-    debugf("DMEM:\n");
-    debug_hexdump(after.dmem, 100);
+    // debugf("DMEM:\n");
+    // debug_hexdump(after.dmem, 100);
+    int diffs=0;
+    for (int i=0;i<764;i++) {
+        uint8_t* a = (uint8_t*)&before;
+        uint8_t* b = (uint8_t*)&after;
+        if (a[i] != b[i]) {
+            debugf("[0x%04x] before=%02x vs after=%02x\n", i,a[i],b[i]);
+            diffs++;
+        }
+    }
 
+    if (diffs > 0) {
+        debugf("Found %d diffs\n",diffs);
+    }
+
+    debugf("Before:\n");
+    debug_hexdump(&before, 100);
+    debugf("After:\n");
+    debug_hexdump(&after, 100);
 
     if((status & SP_STATUS_SIG2)){
         debugf("Test passed");
