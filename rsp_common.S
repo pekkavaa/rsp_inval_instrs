@@ -2,6 +2,7 @@
 #define __RSP_COMMON__
 
 #include <rsp.inc>
+#include <rsp_dma.inc>
 
 .set noreorder
 .set noat
