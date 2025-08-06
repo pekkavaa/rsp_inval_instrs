@@ -36,6 +36,13 @@ void set_test_instruction(uint32_t instr) {
     rsp_load_code(rsp_inval_instrs.code, codebytes, 0);
 }
 
+uint32_t make_cop0_instr(uint32_t function, uint32_t arg) {
+    uint32_t instr = 0x42000000; // "COP0", "CO=1"
+    instr |= (function & 0x3f);
+    instr |= (arg & 0x7ffff) << 6;
+    return instr;
+}
+
 int main(void)
 {
     debug_init_isviewer();
@@ -70,6 +77,7 @@ int main(void)
         {0x34018888, "li $1, 0x8888"},
         {0x00e77cb6, "tne a3,a3,0x1f2"},
         {0x34008888, "li $0, 0x8888"},
+        {make_cop0_instr(3, 123123), "ERET"},
     };
 
     const int numCases = sizeof(cases)/sizeof(cases[0]);
