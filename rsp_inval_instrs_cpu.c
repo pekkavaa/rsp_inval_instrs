@@ -3,9 +3,6 @@
 DEFINE_RSP_UCODE(rsp_inval_instrs);
 DEFINE_RSP_UCODE(rsp_state_loader);
 
-#define DUMP_BYTES (3*4)
-static uint64_t dmem_scratch_space[0x100];
-
 #define COP0_DMA_SPADDR         0
 #define COP0_DMA_RAMADDR        1
 #define COP0_DMA_READ           2
@@ -29,8 +26,10 @@ static uint64_t dmem_scratch_space[0x100];
 
 #define SENTINEL_INSTRUCTION (0x24001234)  // li $0, 0x1234
 static int sentinel_offset = -1;
+static bool verbose = false;
 
 void set_test_instruction(uint32_t instr) {
+    assert(sentinel_offset > -1 && sentinel_offset < 4096);
     *((uint32_t*)&rsp_inval_instrs.code[sentinel_offset]) = instr;
     int codebytes = (rsp_inval_instrs.code_end - (void*)rsp_inval_instrs.code);
     data_cache_hit_writeback_invalidate(rsp_inval_instrs.code, (codebytes+15)&~0xf);
@@ -59,6 +58,7 @@ void randomize_garbage(uint32_t seed) {
     if (!garbage) {
         garbage = malloc_uncached_aligned(16,4096);
     }
+    assert(garbage);
     rand_state = seed;
     for (int i=0;i<4096;i++) {
         garbage[i] = RANDN(256);
@@ -66,6 +66,8 @@ void randomize_garbage(uint32_t seed) {
 }
 
 void set_rsp_regs_to_garbage() {
+    assert(garbage);
+    rsp_wait();
     rsp_load(&rsp_state_loader);
     rsp_load_data(garbage, 4096, 0);
     rsp_run_async();
@@ -74,7 +76,7 @@ void set_rsp_regs_to_garbage() {
 
 void find_sentinel_offset() {
     rsp_load(&rsp_inval_instrs);
-    int codebytes = (rsp_inval_instrs.code_end - (void*)rsp_inval_instrs.code);
+    // int codebytes = (rsp_inval_instrs.code_end - (void*)rsp_inval_instrs.code);
     // debugf("RSP IMEM:\n");
     // debug_hexdump(rsp_inval_instrs.code, codebytes);
 
@@ -100,6 +102,9 @@ uint32_t make_cop0_instr(uint32_t function, uint32_t arg) {
     instr |= (arg & 0x7ffff) << 6;
     return instr;
 }
+
+// #define DEBUGLINE debugf("line: %d\n", __LINE__)
+#define DEBUGLINE 
 
 int main(void)
 {
@@ -203,27 +208,29 @@ int main(void)
     const int MAX_ITER = 100;
 
     for (int caseIdx=0;caseIdx<numCases;caseIdx++) {
+        rand_state = 456;
         debugf("[% 3d] \"%s\", instr: 0x%08lx\n", caseIdx, cases[caseIdx].name, cases[caseIdx].instr);
         for (int iter=0;iter<MAX_ITER;iter++) {
+
+            DEBUGLINE;
             set_rsp_regs_to_garbage();
             rsp_load(&rsp_inval_instrs);
+            DEBUGLINE;
             uint32_t test_instr = cases[caseIdx].instr;
             uint32_t mask = cases[caseIdx].mask;
             if (mask != MASK_NONE) {
                 test_instr = (test_instr & ~mask) | (myrand() & mask);
             }
-            // debugf("% 4d \%s: %08lx\n", iter, cases[caseIdx].name, test_instr);
+            if (verbose) {
+                debugf("% 4d \%s: %08lx\n", iter, cases[caseIdx].name, test_instr);
+            }
             set_test_instruction(test_instr);
+            DEBUGLINE;
 
             rsp_run_async();
-            uint32_t status = 0;
-            int ms = 0;
-            for(; ms<10000; ++ms) {
-                wait_ms(1);
-                status = *SP_STATUS;
-                if (status & (SP_STATUS_HALTED | SP_STATUS_BROKE | SP_STATUS_SIG2 | SP_STATUS_SIG3)) break;
-            }
+            rsp_wait();
 
+            DEBUGLINE;
             rsp_snapshot_t before __attribute__((aligned(8)))={};
             rsp_snapshot_t after __attribute__((aligned(8)))={};
             // align to 8 bytes
@@ -231,22 +238,6 @@ int main(void)
             rsp_read_data(&before, 764, 0);
             rsp_read_data(&after, 764, 1024);
 
-            //memset(after.dmem, 0, 4096);
-            rsp_read_data(&after.dmem, 4096, 0);
-
-            // typedef struct {
-            //     uint32_t gpr[32];           ///< General purpose registers
-            //     uint16_t vpr[32][8];        ///< Vector registers
-            //     uint16_t vaccum[3][8];      ///< Vector accumulator
-            //     uint32_t cop0[16];          ///< COP0 registers (note: reg 4 is SP_STATUS)
-            //     uint32_t cop2[3];           ///< COP2 control registers
-            //     uint32_t pc;                ///< Program counter
-            //     uint8_t dmem[4096] __attribute__((aligned(8)));  ///< Contents of DMEM
-            //     uint8_t imem[4096] __attribute__((aligned(8)));  ///< Contents of IMEM
-            // } rsp_snapshot_t;
-
-            // debugf("DMEM:\n");
-            // debug_hexdump(after.dmem, 100);
             int diffs=0;
             int ignored=0;
             int cop0diffs = 0;
@@ -286,6 +277,8 @@ int main(void)
                 }
             }
 
+            DEBUGLINE;
+
             if (cop0diffs > 0) { 
                 debugf("  before vs after\n");
                 const char* cop0names[] = {
@@ -312,7 +305,8 @@ int main(void)
                 }
             }
 
-            //results[caseIdx] = (struct Result){.numDiffs = diffs};
+            DEBUGLINE;
+
             results[caseIdx].numDiffs += diffs; // = (struct Result){.numDiffs = diffs};
             results[caseIdx].itersFailed += (diffs > 0);
             results[caseIdx].itersRun++;
@@ -321,21 +315,7 @@ int main(void)
                 debugf("test_instr=0x%08lx", test_instr);
             }
 
-            // debugf("Before:\n");
-            // debug_hexdump(&before, 200);
-            // debugf("After:\n");
-            // debug_hexdump(&after, 200);
-
-            if (false) {
-                if((status & SP_STATUS_SIG2)){
-                    debugf("Test passed");
-                }else if((status & SP_STATUS_SIG3)){
-                    debugf("Test failed");
-                }else{
-                    debugf("Test timed out");
-                }
-                debugf(" after %d ms\n", ms);
-            }
+            DEBUGLINE;
 
             if (mask == MASK_NONE) {
                 break; // don't run multiple iterations if we don't randomize
