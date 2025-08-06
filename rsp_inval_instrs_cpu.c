@@ -1,6 +1,7 @@
 #include <libdragon.h>
 
 DEFINE_RSP_UCODE(rsp_inval_instrs);
+DEFINE_RSP_UCODE(rsp_state_loader);
 
 #define DUMP_BYTES (3*4)
 static uint64_t dmem_scratch_space[0x100];
@@ -43,11 +44,51 @@ uint32_t make_cop0_instr(uint32_t function, uint32_t arg) {
     return instr;
 }
 
+static uint32_t rand_state = 1;
+static uint32_t myrand(void) {
+	uint32_t x = rand_state;
+	x ^= x << 13;
+	x ^= x >> 7;
+	x ^= x << 5;
+	return rand_state = x;
+}
+
+// RANDN(n): generate a random number from 0 to n-1
+#define RANDN(n) ({ \
+	__builtin_constant_p((n)) ? \
+		(myrand()%(n)) : \
+		(uint32_t)(((uint64_t)myrand() * (n)) >> 32); \
+})
+
+static uint8_t* garbage = NULL;
+
+void randomize_garbage(uint32_t seed) {
+    if (!garbage) {
+        garbage = malloc_uncached_aligned(16,4096);
+    }
+    rand_state = seed;
+    uint32_t* dest = (uint32_t*)garbage;
+    for (int i=0;i<1024;i++) {
+        *dest = myrand();
+        dest++;
+    }
+}
+
+void set_rsp_regs_to_garbage() {
+    rsp_load(&rsp_state_loader);
+    rsp_load_data(garbage, 4096, 0);
+    rsp_run_async();
+    rsp_wait();
+}
+
 int main(void)
 {
     debug_init_isviewer();
     debug_init_usblog();
     rsp_init();
+
+    randomize_garbage(123);
+    set_rsp_regs_to_garbage();
 
     rsp_load(&rsp_inval_instrs);
     SP_DMEM[0] = (uint32_t)(&dmem_scratch_space[0]);
@@ -217,5 +258,5 @@ int main(void)
         debugf("[% 2d] %15s 0x%08lx % 2d\n", caseIdx, cases[caseIdx].name, cases[caseIdx].instr, results[caseIdx].numDiffs);
     }
 
-    //rsp_crash();
+    rsp_crash();
 }

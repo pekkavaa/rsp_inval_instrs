@@ -181,7 +181,7 @@ entry_point:
 	lw $15, 15*4(zero)
  
     // restore s0=$16
-	sw $16, 16*4(zero)
+	lw $16, 16*4(zero)
 
     // Do Something
 	li $0, 0x1234 // this sentinel will be replaced on the CPU-side
