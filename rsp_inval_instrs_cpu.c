@@ -205,7 +205,7 @@ int main(void)
         int itersRun;
     } results[numCases] = {};
 
-    const int MAX_ITER = 100;
+    const int MAX_ITER = 1000;
 
     for (int caseIdx=0;caseIdx<numCases;caseIdx++) {
         rand_state = 456;
@@ -249,26 +249,26 @@ int main(void)
                     // debugf("[0x%04x] before=%02x vs after=%02x. DMEM[word=%d]\n", i,a[i],b[i],i/4);
                     if (i < offsetof(rsp_snapshot_t, vpr)) {
                         int idx = i/4;
-                        debugf("gpr %d\n", idx);
+                        if (verbose) debugf("gpr %d\n", idx);
                     } else if (i < offsetof(rsp_snapshot_t, vaccum)) {
                         int idx = (i - offsetof(rsp_snapshot_t, vpr))/16;
-                        debugf("vpr %d\n", idx);
+                        if (verbose) debugf("vpr %d\n", idx);
                     }else if (i < offsetof(rsp_snapshot_t, cop0)) {
                         int idx = (i - offsetof(rsp_snapshot_t, vaccum))/16;
-                        debugf("vaccum %d\n", idx);
+                        if (verbose) debugf("vaccum %d\n", idx);
                     } else if ( i < offsetof(rsp_snapshot_t, cop2)) {
                         int idx = (i - offsetof(rsp_snapshot_t, cop0))/4;
                         if (idx == COP0_SEMAPHORE || idx == COP0_DP_CLOCK || idx == COP0_DP_PIPE_BUSY) {
                             ignore=true;
                             ignored++;
                         } else {
-                            debugf("cop0 %d\n", idx);
+                            if (verbose) debugf("cop0 %d\n", idx);
                             cop0diffs++;
                         }
                         
                     } else if ( i < offsetof(rsp_snapshot_t, pc)) {
                         int idx = (i - offsetof(rsp_snapshot_t, cop2))/4;
-                        debugf("cop2 %d\n", idx);
+                        if (verbose) debugf("cop2 %d\n", idx);
                     }
 
                     if (!ignore) {
@@ -311,8 +311,10 @@ int main(void)
             results[caseIdx].itersFailed += (diffs > 0);
             results[caseIdx].itersRun++;
             if (diffs > 0) {
-                debugf("Found %d diffs (not including %d ignored)\n", diffs,ignored);
-                debugf("test_instr=0x%08lx", test_instr);
+                if (verbose) {
+                    debugf("test_instr=0x%08lx: ", test_instr);
+                    debugf("Found %d diffs (not including %d ignored)\n", diffs,ignored);
+                }
             }
 
             DEBUGLINE;
