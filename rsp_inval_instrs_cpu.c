@@ -81,35 +81,37 @@ void set_rsp_regs_to_garbage() {
     rsp_wait();
 }
 
-int main(void)
-{
-    debug_init_isviewer();
-    debug_init_usblog();
-    rsp_init();
-
-    randomize_garbage(123);
-    set_rsp_regs_to_garbage();
-
+void find_sentinel_offset() {
     rsp_load(&rsp_inval_instrs);
-    SP_DMEM[0] = (uint32_t)(&dmem_scratch_space[0]);
-
-    debugf("Build: " __TIMESTAMP__ "\n");
     int codebytes = (rsp_inval_instrs.code_end - (void*)rsp_inval_instrs.code);
-    debugf("RSP IMEM:\n");
-    debug_hexdump(rsp_inval_instrs.code, codebytes);
+    // debugf("RSP IMEM:\n");
+    // debug_hexdump(rsp_inval_instrs.code, codebytes);
 
     uint32_t* code=(uint32_t*)rsp_inval_instrs.code;
     int offset=0;
+    sentinel_offset = -1;
     while (code < (uint32_t*)rsp_inval_instrs.code_end) {
         if (*code == SENTINEL_INSTRUCTION) {
             // sentinel_offset = rsp_inval_instrs.data - (uint8_t*)code;
             sentinel_offset = offset;
+            break;
         }
         offset+=4;
         code++;
     }
     assert(sentinel_offset > -1);
-    debugf("Found sentinel at offset 0x%04x\n", sentinel_offset);
+    //debugf("Found sentinel at offset 0x%04x\n", sentinel_offset);
+}
+
+int main(void)
+{
+    debug_init_isviewer();
+    debug_init_usblog();
+    rsp_init();
+    debugf("Build: " __TIMESTAMP__ "\n");
+
+    randomize_garbage(123);
+    find_sentinel_offset();
 
     struct TestCase {
         uint32_t instr;
@@ -128,12 +130,9 @@ int main(void)
 
     for (int caseIdx=0;caseIdx<numCases;caseIdx++) {
         debugf("[% 2d] \"%s\", instr: 0x%08lx\n", caseIdx, cases[caseIdx].name, cases[caseIdx].instr);
-        set_test_instruction(cases[caseIdx].instr);   // li $0, 0x8888
-        // set_test_instruction(0x34018888);   // li $1, 0x8888
-        // set_test_instruction(0x00e77cb6);  //tne a3,a3,0x1f2
-
-        // debugf("RSP IMEM after:\n");
-        // debug_hexdump(rsp_inval_instrs.code, codebytes);
+        set_rsp_regs_to_garbage();
+        rsp_load(&rsp_inval_instrs);
+        set_test_instruction(cases[caseIdx].instr);
 
         debugf("Testing...\n");
         rsp_run_async();
