@@ -4,19 +4,6 @@
 .set noat
 
 .text
-    j    entry_point
-     nop
-
-.data
-dump:
-    .word 0 // COP2_CTRL_VCO
-    .word 0 // COP2_CTRL_VCC
-    .word 0 // COP2_CTRL_VCE
-    .word 0
-
-.text
-
-entry_point:
 	lw $0,  0*4(zero)
 	lw $1,  1*4(zero)
 	lw $2,  2*4(zero)
@@ -169,16 +156,17 @@ entry_point:
 	//sw $16, 16*4(zero)
 
 	lw $16, 16*4(zero) // s0
-
-    // State loaded
-    j       signal_and_halt
-	li     $1, (SP_WSTATUS_SET_HALT | SP_WSTATUS_SET_SIG2)  // Success
-    
-test_failed:
-    li      $1, (SP_WSTATUS_SET_HALT | SP_WSTATUS_SET_SIG3)  // Failed
-signal_and_halt:
-    mtc0    $1, COP0_SP_STATUS
+	
     break
 halt:
     j       halt
-     nop
+    nop
+
+.data
+dummy:
+    .word 0
+    .word 0
+    .word 0
+    .word 0
+
+.text
